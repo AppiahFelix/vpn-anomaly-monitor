@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VPN Access Monitor — Anomaly Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="dashboard_data.js"></script>
+<style>
+  :root{
+    --bg:#0A0D12;
+    --panel:#12161F;
+    --panel-2:#161B26;
+    --border:#232838;
+    --text:#E4E7EE;
+    --muted:#8890A3;
+    --accent:#2DD9A8;
+    --indigo:#7C8CFF;
+    --high:#FF5C5C;
+    --med:#FFB454;
+    --low:#5CA8FF;
+    --mono:'IBM Plex Mono', monospace;
+    --disp:'Space Grotesk', sans-serif;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(124,140,255,0.07), transparent 40%),
+      radial-gradient(circle at 85% 15%, rgba(45,217,168,0.06), transparent 40%);
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 64px;}
+
+  header{display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:24px; border-bottom:1px solid var(--border); padding-bottom:20px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 6px;}
+  h1{font-family:var(--disp); font-size:28px; margin:0; font-weight:700; letter-spacing:-0.01em;}
+  .meta{font-family:var(--mono); font-size:12px; color:var(--muted); text-align:right;}
+  .meta span{color:var(--text);}
+
+  .stream{
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--border); border-radius:10px; padding:16px 18px;
+    margin-bottom:28px; font-family:var(--mono); font-size:12.5px; line-height:1.9;
+    overflow:hidden; position:relative;
+  }
+  .stream-title{font-family:var(--sans); font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--accent); display:inline-block; animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .log-line{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-left:2px solid transparent; padding-left:10px; color:var(--muted);}
+  .log-line b{color:var(--text); font-weight:500;}
+  .log-line.high{border-color:var(--high);}
+  .log-line.medium{border-color:var(--med);}
+  .log-line.low{border-color:var(--low);}
+  .tag{font-size:10px; padding:1px 6px; border-radius:4px; margin-right:8px; font-weight:600;}
+  .tag.high{background:rgba(255,92,92,.14); color:var(--high);}
+  .tag.medium{background:rgba(255,180,84,.14); color:var(--med);}
+  .tag.low{background:rgba(92,168,255,.14); color:var(--low);}
+
+  .cards{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px;}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px;}
+  .card .num{font-family:var(--disp); font-size:32px; font-weight:700;}
+  .card .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:4px;}
+  .card.high .num{color:var(--high);}
+  .card.medium .num{color:var(--med);}
+  .card.low .num{color:var(--low);}
+  .card.total .num{color:var(--indigo);}
+
+  .grid2{display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-bottom:28px;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px;}
+  .panel h2{font-family:var(--disp); font-size:15px; margin:0 0 14px; font-weight:700;}
+  canvas{max-height:230px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:8px 10px; border-bottom:1px solid var(--border); font-weight:600;}
+  tbody td{padding:10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
+  td.user{font-family:var(--mono); color:var(--text);}
+  td.ip{font-family:var(--mono); color:var(--muted); font-size:12px;}
+  td.ts{font-family:var(--mono); color:var(--muted); font-size:12px; white-space:nowrap;}
+  td.detail{color:var(--muted); font-size:12.5px;}
+  .sev{font-size:10px; padding:2px 8px; border-radius:20px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+  .sev.high{background:rgba(255,92,92,.14); color:var(--high);}
+  .sev.medium{background:rgba(255,180,84,.14); color:var(--med);}
+  .sev.low{background:rgba(92,168,255,.14); color:var(--low);}
+
+  .filters{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .filters button{
+    font-family:var(--mono); font-size:11px; background:var(--panel-2); color:var(--muted);
+    border:1px solid var(--border); border-radius:20px; padding:6px 14px; cursor:pointer;
+  }
+  .filters button.active{background:var(--indigo); color:#0A0D12; border-color:var(--indigo); font-weight:600;}
+
+  footer{margin-top:32px; font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;}
+
+  @media(max-width:820px){
+    .cards{grid-template-columns:repeat(2,1fr);}
+    .grid2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">// vpn-monitor · rule-based anomaly detection</p>
+      <h1>Remote Access Anomaly Dashboard</h1>
+    </div>
+    <div class="meta">generated <span id="gen-time">—</span><br>events analyzed: <span id="total-events">—</span></div>
+  </header>
+
+  <div class="stream">
+    <div class="stream-title"><span class="dot"></span> anomaly stream — most recent first</div>
+    <div id="log-stream"></div>
+  </div>
+
+  <div class="cards" id="summary-cards"></div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Login volume — success vs. failed</h2>
+      <canvas id="volumeChart"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Anomalies by detector</h2>
+      <canvas id="typeChart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Flagged connections</h2>
+    <div class="filters" id="filters"></div>
+    <table>
+      <thead>
+        <tr><th>Severity</th><th>Type</th><th>User</th><th>Source IP</th><th>Timestamp</th><th>Detail</th></tr>
+      </thead>
+      <tbody id="anomaly-table"></tbody>
+    </table>
+  </div>
+
+  <footer>Generic-schema VPN log monitor · compatible with any vendor normalized to timestamp / username / event / source_ip / country / lat / lon</footer>
+</div>
+
+<script>
+const data = typeof VPN_DASHBOARD_DATA !== 'undefined' ? VPN_DASHBOARD_DATA : {findings:[], daily_series:[], by_type:{}, total_events:0, total_anomalies:0, generated_at:''};
+
+document.getElementById('gen-time').textContent = data.generated_at;
+document.getElementById('total-events').textContent = data.total_events;
+
+// Summary cards
+const sevCounts = {high:0, medium:0, low:0};
+data.findings.forEach(f => sevCounts[f.severity] = (sevCounts[f.severity]||0)+1);
+const cardsHtml = `
+  <div class="card total"><div class="num">${data.total_anomalies}</div><div class="label">Total anomalies</div></div>
+  <div class="card high"><div class="num">${sevCounts.high||0}</div><div class="label">High severity</div></div>
+  <div class="card medium"><div class="num">${sevCounts.medium||0}</div><div class="label">Medium severity</div></div>
+  <div class="card low"><div class="num">${sevCounts.low||0}</div><div class="label">Low severity</div></div>
+`;
+document.getElementById('summary-cards').innerHTML = cardsHtml;
+
+// Log stream (most recent 8)
+const streamEl = document.getElementById('log-stream');
+const recent = [...data.findings].reverse().slice(0, 8);
+streamEl.innerHTML = recent.map(f => `
+  <div class="log-line ${f.severity}">
+    <span class="tag ${f.severity}">${f.severity}</span>
+    <b>${f.timestamp}</b> user=<b>${f.username}</b> type=<b>${f.type}</b> ip=${f.source_ip} — ${f.detail}
+  </div>
+`).join('');
+
+// Volume chart
+const days = data.daily_series.map(d => d.date.slice(5));
+new Chart(document.getElementById('volumeChart'), {
+  type:'bar',
+  data:{
+    labels: days,
+    datasets:[
+      {label:'Success', data: data.daily_series.map(d=>d.success), backgroundColor:'#2DD9A8'},
+      {label:'Failed', data: data.daily_series.map(d=>d.failed), backgroundColor:'#FF5C5C'}
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{legend:{labels:{color:'#8890A3', font:{family:'IBM Plex Mono', size:10}}}},
+    scales:{
+      x:{ticks:{color:'#8890A3', font:{size:9}}, grid:{color:'#232838'}},
+      y:{ticks:{color:'#8890A3', font:{size:9}}, grid:{color:'#232838'}, beginAtZero:true}
+    }
+  }
+});
+
+// Type chart
+const typeLabels = Object.keys(data.by_type);
+const typeColors = {brute_force:'#FF5C5C', impossible_travel:'#FF5C5C', unusual_country:'#FFB454', off_hours_access:'#FFB454', long_session:'#5CA8FF'};
+new Chart(document.getElementById('typeChart'), {
+  type:'doughnut',
+  data:{
+    labels: typeLabels,
+    datasets:[{data: typeLabels.map(t=>data.by_type[t]), backgroundColor: typeLabels.map(t=>typeColors[t]||'#7C8CFF'), borderColor:'#12161F', borderWidth:2}]
+  },
+  options:{
+    responsive:true,
+    plugins:{legend:{position:'bottom', labels:{color:'#8890A3', font:{family:'IBM Plex Mono', size:10}, boxWidth:10}}}
+  }
+});
+
+// Table + filters
+let activeFilter = 'all';
+function renderTable(){
+  const rows = data.findings.filter(f => activeFilter==='all' || f.type===activeFilter).slice().reverse();
+  document.getElementById('anomaly-table').innerHTML = rows.map(f => `
+    <tr>
+      <td><span class="sev ${f.severity}">${f.severity}</span></td>
+      <td class="user">${f.type}</td>
+      <td class="user">${f.username}</td>
+      <td class="ip">${f.source_ip}</td>
+      <td class="ts">${f.timestamp}</td>
+      <td class="detail">${f.detail}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" class="detail">No anomalies for this filter.</td></tr>';
+}
+const filterTypes = ['all', ...typeLabels];
+document.getElementById('filters').innerHTML = filterTypes.map(t =>
+  `<button data-t="${t}" class="${t==='all'?'active':''}">${t}</button>`
+).join('');
+document.querySelectorAll('#filters button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#filters button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.t;
+    renderTable();
+  });
+});
+renderTable();
+</script>
+</body>
+</html>
